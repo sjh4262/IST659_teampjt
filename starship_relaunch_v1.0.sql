@@ -192,7 +192,7 @@ CREATE TABLE location_connections (
     connection_id INT IDENTITY PRIMARY KEY,
     from_location_id INT NOT NULL,
     to_location_id INT NOT NULL,
-    direction VARCHAR(20) NOT NULL, -- e.g., 'north', 'south'
+    direction VARCHAR(20) NOT NULL -- e.g., 'north', 'south'
 )
 GO
 
@@ -253,7 +253,7 @@ CREATE TABLE players (
     current_location_id INT NOT NULL,
     health INT DEFAULT 100, -- remove
     score INT DEFAULT 0, -- remove
-    last_action_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_action_time DATETIME DEFAULT CURRENT_TIMESTAMP
 )
 GO
 
