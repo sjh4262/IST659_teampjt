@@ -634,13 +634,13 @@ IF NOT EXISTS (SELECT 1 FROM location_items WHERE location_id=@west_sub2 AND ite
     INSERT INTO location_items (location_id, item_id) VALUES (@west_sub2, @ecu_id);
 
 /* North */
--- North Item: Fuel cell
-IF NOT EXISTS (SELECT 1 FROM items WHERE item_name = 'Fuel cell')
+-- North Item: Fuel Cell
+IF NOT EXISTS (SELECT 1 FROM items WHERE item_name = 'Fuel Cell')
 BEGIN
     INSERT INTO items (item_name, item_description, is_pickable, is_usable)
-    VALUES ('Fuel cell', 'A still functioning and charged fuel cell from a previous unmanned surveying satalite.', 1, 1);
+    VALUES ('Fuel Cell', 'A still functioning and charged Fuel Cell from a previous unmanned surveying satalite.', 1, 1);
 END;
-DECLARE @fuel_id INT = (SELECT item_id FROM items WHERE item_name='Fuel cell');
+DECLARE @fuel_id INT = (SELECT item_id FROM items WHERE item_name='Fuel Cell');
 
 -- Map Item to north_sub3 (Dreary desert dune)
 IF NOT EXISTS (SELECT 1 FROM location_items WHERE location_id=@north_sub3 AND item_id=@fuel_id)
