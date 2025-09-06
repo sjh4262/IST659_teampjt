@@ -287,7 +287,6 @@ GO
 CREATE TABLE action_log (
     log_id INT IDENTITY PRIMARY KEY,
     player_id INT NOT NULL,
-    action_location INT NOT NULL,
     action_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     player_action VARCHAR(50),
     details TEXT
@@ -677,7 +676,7 @@ GO
 
 /**********************************************************************
   SECTION 4: Stored Procedures
-  -- Stored procedures govern gameplay
+  -- Define gameplay logic: movement, inventory actions, logging
   -- 4.1 usp_lookAround
   -- 4.2 usp_movePlayer
   -- 4.3 usp_showInventory
@@ -720,22 +719,12 @@ BEGIN
     SELECT direction, to_location_id
     FROM location_connections
     WHERE from_location_id = @location_id;
-
-    -- update action_log
-    DECLARE @current_location_name NVARCHAR(20)
-    DECLARE @lookMessage VARCHAR(100);
-
-    -- get item name
-    SELECT @current_location_name = location_name FROM locations WHERE location_id = @location_id
-    SET @lookMessage = 'Player looked around in the ' + @current_location_name + ' location'
-    INSERT INTO action_log (player_id, action_location, action_time, player_action, details)
-    VALUES (@player_id, @location_id, CURRENT_TIMESTAMP, 'Look Around', @lookMessage);
 END;
 GO
 
 /*======================================================================
   4.2 usp_movePlayer @player_id, @direction
--- moves player in a valid direction based on location_connections
+-- moves player if valid exit exists in that direction
 -- automatically calls usp_lookaround after moving
 ======================================================================*/
 
@@ -778,30 +767,38 @@ BEGIN
         last_action_time = GETDATE()
     WHERE player_id = @player_id;
 
-    -- update action_log
-    DECLARE @current_location_name NVARCHAR(20)
-    DECLARE @next_location_name NVARCHAR(20)
-    DECLARE @moveMessage NVARCHAR(100);
-
-    -- get location names
-    SELECT @current_location_name = location_name FROM locations WHERE location_id = @current_location
-    SELECT @next_location_name = location_name FROM locations WHERE location_id = @next_location
-    -- create and insert action_log message
-    SET @moveMessage = 'Player moved from ' + @current_location_name + ' to ' + @next_location_name
-    INSERT INTO action_log (player_id, action_location, action_time, player_action, details)
-    VALUES (@player_id, @next_location, CURRENT_TIMESTAMP, 'Move Player', @moveMessage);
-
+    EXEC usp_lookAround @player_id; -- Show the new location
 END;
 GO
 
 /*======================================================================
-  4.3 usp_pickUpItem @player_id, @item_id
--- picks up an item from the location (if present and pickable)
+  4.3 usp_showinventory @player_id
+-- lists all items the player is carrying
+-- includes quantity and item descriptions
+======================================================================*/
+
+-- 17 create usp_showInventory 
+CREATE PROCEDURE usp_showInventory
+    @player_id INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- get items from item inventory for @player_id
+    SELECT i.item_id, i.item_name AS ItemName, i.item_description, inv.quantity
+    FROM inventory inv
+    JOIN items i ON inv.item_id = i.item_id
+    WHERE inv.player_id = @player_id;
+END;
+GO
+
+/*======================================================================
+  4.4 usp_pickUpItem @player_id, @item_id
+-- picks up an item fromt he location (if present and pickable)
 -- adds it to the player's inventory (increments if held)
 -- removes it from the location
 ======================================================================*/
 
--- 17 create usp_pickUpItem
+-- 18 create usp_pickUpItem
 CREATE PROCEDURE usp_pickUpItem
     @player_id INT,
     @item_id INT
@@ -861,55 +858,11 @@ BEGIN
     FROM items 
     WHERE item_id = @item_id;
 
-    -- update action_log
-    DECLARE @current_location_name NVARCHAR(20)
-    DECLARE @pickMessage VARCHAR(100);
-
-    -- get item name
-    SELECT @current_location_name = location_name FROM locations WHERE location_id = @location_id
-
-    -- create and insert action_log message
-    SET @pickMessage = 'Player picked up ' + @item_name + ' in the ' + @current_location_name + ' location'
-    INSERT INTO action_log (player_id, action_location, action_time, player_action, details)
-    VALUES (@player_id, @location_id, CURRENT_TIMESTAMP, 'Pick Up Item', @pickMessage);
-
     -- return message
     IF @item_name IS NOT NULL
         PRINT 'You have picked up an item: ' + @item_name + '.';
     ELSE
         PRINT 'Item not found.';
-    
-
-END;
-GO
-
-/*======================================================================
-  4.4 usp_showinventory @player_id
--- lists all items a player has picked up
--- includes quantity and item descriptions
-======================================================================*/
-
--- 18 create usp_showInventory 
-CREATE PROCEDURE usp_showInventory
-    @player_id INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    -- get items from item inventory for @player_id
-    SELECT i.item_id, i.item_name AS ItemName, i.item_description, inv.quantity
-    FROM inventory inv
-    JOIN items i ON inv.item_id = i.item_id
-    WHERE inv.player_id = @player_id;
-
-    DECLARE @location_id INT;
-    -- get player's current location 
-    SELECT @location_id = current_location_id
-    FROM players
-    WHERE player_id = @player_id;
-
-    -- update action_log
-    INSERT INTO action_log (player_id, action_location, action_time, player_action, details)
-    VALUES (@player_id, @location_id, CURRENT_TIMESTAMP, 'Show Inventory', 'Player viewed the items in their inventory');
 END;
 GO
 
@@ -919,45 +872,34 @@ GO
   -- If the player has all 4 items → declare victory
   -- If missing items → return guidance message
 **********************************************************************/
-
--- 19 create usp_completeGame
 CREATE OR ALTER PROCEDURE usp_completeGame
     @player_id INT
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- check that the player is back at the Crash Site
-    DECLARE @player_location_id INT;
-    DECLARE @crash_site_id INT;
-
-    -- get Crash Site location_id
-    SELECT @crash_site_id = location_id
-    FROM locations
-    WHERE location_name = 'Crash Site';
-
-    -- get player's current location_id
-    SELECT @player_location_id = current_location_id
-    FROM players
-    WHERE player_id = @player_id;
-
-    -- check to see if the player is at the Crash Site
-    IF @player_location_id <> @crash_site_id
-    BEGIN
-        PRINT 'You must return to your starship at the crash site in order to install missing parts';
-        RETURN;
-    END
-
-    -- check for required items
     BEGIN TRY
         -- define 4 required items and the hints to find them
         DECLARE @requiredItems TABLE (item_id INT, item_name VARCHAR(50), hint VARCHAR(200));
-        INSERT INTO @requiredItems (item_id, item_name, hint)
-        VALUES 
-            (1, 'Nav Beacon Core', 'Head east in search of a tower as beacon of hope...'),
-            (2, 'Electronics Control Unit',  'There is a dark location to explore to the west...'),
-            (3, 'Fuel Cell',    'To the north, a mound of sand might fuel your escape...'),
-            (4, 'Micro-generator', 'A southern wind generates a toxic smell from the mud flats...');
+        -- INSERT INTO @requiredItems (item_id, item_name, hint)
+        -- VALUES 
+        --     (1, 'Nav Beacon Core', 'Head east in search of a tower as beacon of hope...'),
+        --     (2, 'Electronics Control Unit',  'There is a dark location to explore to the west...'),
+        --     (3, 'Fuel Cell',    'To the north, a mound of sand might fuel your escape.'),
+        --     (4, 'Micro-generator', 'A southern wind generates a toxic smell from the mud flats.');
+        
+        INSERT INTO @requiredItems (item_id, item_name, hint) 
+        SELECT i.item_id, v.item_name, v.hint 
+        FROM (VALUES ('Nav Beacon Core','Head east in search of a tower as beacon of hope...'),
+                    ('Electronics Control Unit','There is a dark location to explore to the west...'),
+                    ('Fuel Cell','To the north, a mound of sand might fuel your escape.'),
+                    ('Micro-generator','A southern wind generates a toxic smell from the mud flats.')
+            ) v(item_name,hint) 
+        JOIN items i ON i.item_name=v.item_name;
+        
+        -- check - if there are not 4 items, error
+        IF (SELECT COUNT(*) FROM @requiredItems) < 4 
+            RAISERROR('One or more required items were not found by name. Check item_name spellings.', 16, 1);
 
         -- check the players inventory for required items
         DECLARE @playerItems TABLE (item_id INT);
@@ -979,18 +921,10 @@ BEGIN
                 r.hint AS SuggestedLocation
             FROM @requiredItems AS r
             WHERE r.item_id NOT IN (SELECT item_id FROM @playerItems);
-
-            -- update action log
-            INSERT INTO action_log (player_id, action_location, action_time, player_action, details)
-            VALUES (@player_id, @player_location_id, CURRENT_TIMESTAMP, 'Attempted to Complete Game', 'Player attempted to finished the game without all of the required items');
         END
         ELSE
         BEGIN
             -- Player has all 4 items
-            -- update action_log
-            INSERT INTO action_log (player_id, action_location, action_time, player_action, details)
-            VALUES (@player_id, @player_location_id, CURRENT_TIMESTAMP, 'Complete Game', 'Player finished the game');
-            -- return message
             PRINT 'You have everything you need to launch!  Time to leave this strange planet.  Game over';
         END
     END TRY
@@ -998,9 +932,11 @@ BEGIN
         PRINT 'Error in usp_completeGame.';
         PRINT ERROR_MESSAGE();
     END CATCH
-    
 END;
 GO
+
+
+
 
 /**********************************************************************
   SECTION 5: Database Views

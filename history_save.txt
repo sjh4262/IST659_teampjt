@@ -1,0 +1,1 @@
+git log --follow -p --no-color -- "starship_relaunch_v1.0.sql" > file_history.patch
