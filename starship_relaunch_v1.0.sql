@@ -473,7 +473,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@east_s
     VALUES (@east_sub1, @east_id, 'back');
 
 -- East <-> Debris Field
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@east_id AND to_location_id=@east_sub2 AND direction='forward')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@east_id AND to_location_id=@east_sub2 AND direction='left')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@east_id, @east_sub2, 'left');
 
@@ -482,7 +482,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@east_s
     VALUES (@east_sub2, @east_id, 'back');
 
 -- East <-> Beacon Tower
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@east_id AND to_location_id=@east_sub3 AND direction='forward')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@east_id AND to_location_id=@east_sub3 AND direction='right')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@east_id, @east_sub3, 'right');
 
@@ -510,7 +510,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@west_s
     VALUES (@west_sub1, @west_id, 'back');
 
 -- west <-> Sub2
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@west_id AND to_location_id=@west_sub2 AND direction='forward')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@west_id AND to_location_id=@west_sub2 AND direction='left')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@west_id, @west_sub2, 'left');
 
@@ -519,7 +519,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@west_s
     VALUES (@west_sub2, @west_id, 'back');
 
 -- west <-> Sub3
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@west_id AND to_location_id=@west_sub3 AND direction='forward')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@west_id AND to_location_id=@west_sub3 AND direction='right')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@west_id, @west_sub3, 'right');
 
@@ -575,7 +575,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@south_
     VALUES (@south_id, @crash_id, 'north');
 
 -- South <-> Sub1
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_id AND to_location_id=@South_sub1 AND direction='Hidden Grove')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_id AND to_location_id=@South_sub1 AND direction='forward')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@South_id, @South_sub1, 'forward');
 
@@ -584,7 +584,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_
     VALUES (@South_sub1, @South_id, 'back');
 
 -- South <-> Sub2
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_id AND to_location_id=@South_sub2 AND direction='Foggy Mud Flat')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_id AND to_location_id=@South_sub2 AND direction='left')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@South_id, @South_sub2, 'left');
 
@@ -593,7 +593,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_
     VALUES (@South_sub2, @South_id, 'back');
 
 -- South <-> Sub3
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_id AND to_location_id=@South_sub3 AND direction='Boat Dock')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@South_id AND to_location_id=@South_sub3 AND direction='right')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@South_id, @South_sub3, 'right');
 
