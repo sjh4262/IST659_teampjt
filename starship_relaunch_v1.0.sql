@@ -938,18 +938,18 @@ GO
 **********************************************************************/
 
 /* 5) Lightweight view: East path summary */
-IF OBJECT_ID('v_east_path','V') IS NOT NULL DROP VIEW v_east_path;
-GO
-CREATE VIEW v_east_path AS
-SELECT r_from.location_name AS FromLocation, rc.direction, r_to.location_name AS ToLocation
-FROM location_connections rc
-JOIN locations r_from ON rc.from_location_id = r_from.location_id
-JOIN locations r_to   ON rc.to_location_id   = r_to.location_id
-WHERE r_from.location_name IN ('Crash Site','Nav Ping (East)')
-   OR r_to.location_name   IN ('Nav Ping (East)','Signal Ridge','Debris Field','Beacon Terminal','Crashed Probe');
-GO
+-- IF OBJECT_ID('v_east_path','V') IS NOT NULL DROP VIEW v_east_path;
+-- GO
+-- CREATE VIEW v_east_path AS
+-- SELECT r_from.location_name AS FromLocation, rc.direction, r_to.location_name AS ToLocation
+-- FROM location_connections rc
+-- JOIN locations r_from ON rc.from_location_id = r_from.location_id
+-- JOIN locations r_to   ON rc.to_location_id   = r_to.location_id
+-- WHERE r_from.location_name IN ('Crash Site','Nav Ping (East)')
+--    OR r_to.location_name   IN ('Nav Ping (East)','Signal Ridge','Debris Field','Beacon Terminal','Crashed Probe');
+-- GO
 
-SELECT * FROM v_east_path;
+-- SELECT * FROM v_east_path;
 
 
 /**********************************************************************
