@@ -83,6 +83,10 @@ IF OBJECT_ID('dbo.usp_LookAround', 'P') IS NOT NULL
     DROP PROCEDURE dbo.usp_LookAround;
 GO
 
+IF OBJECT_ID('dbo.usp_completeGame', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.usp_completeGame;
+GO
+
 -- 14 soft drop action_log fk constraints
 IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
     WHERE CONSTRAINT_NAME = 'fk_action_log_player_id')
@@ -547,7 +551,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@north_
     VALUES (@north_sub1, @north_id, 'back');
 
 -- North <-> Massive Stone
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@north_id AND to_location_id=@north_sub2 AND direction='forward')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@north_id AND to_location_id=@north_sub2 AND direction='left')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@north_id, @north_sub2, 'left');
 
@@ -556,7 +560,7 @@ IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@north_
     VALUES (@north_sub2, @north_id, 'back');
 
 -- North <-> Dreary desert dune
-IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@north_id AND to_location_id=@north_sub3 AND direction='forward')
+IF NOT EXISTS (SELECT 1 FROM location_connections WHERE from_location_id=@north_id AND to_location_id=@north_sub3 AND direction='right')
     INSERT INTO location_connections (from_location_id, to_location_id, direction)
     VALUES (@north_id, @north_sub3, 'right');
 
@@ -664,7 +668,9 @@ IF NOT EXISTS (SELECT 1 FROM location_items WHERE location_id=@south_sub2 AND it
   3.4 ADD PLAYER
 ======================================================================*/
 -- create Player One
-INSERT INTO players (username, current_location_id) VALUES ('Player One',1)
+-- INSERT INTO players (username, current_location_id) VALUES ('Player One',1)
+INSERT INTO players (username, current_location_id) VALUES ('Player One', @crash_id)
+
 GO
 
 
