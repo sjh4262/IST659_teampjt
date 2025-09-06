@@ -875,12 +875,25 @@ BEGIN
     BEGIN TRY
         -- define 4 required items and the hints to find them
         DECLARE @requiredItems TABLE (item_id INT, item_name VARCHAR(50), hint VARCHAR(200));
-        INSERT INTO @requiredItems (item_id, item_name, hint)
-        VALUES 
-            (1, 'Nav Beacon Core', 'Head east in search of a tower as beacon of hope...'),
-            (2, 'Electronics Control Unit',  'There is a dark location to explore to the west...'),
-            (3, 'Fuel Cell',    'To the north, a mound of sand might fuel your escape.'),
-            (4, 'Micro-generator', 'A southern wind generates a toxic smell from the mud flats.');
+        -- INSERT INTO @requiredItems (item_id, item_name, hint)
+        -- VALUES 
+        --     (1, 'Nav Beacon Core', 'Head east in search of a tower as beacon of hope...'),
+        --     (2, 'Electronics Control Unit',  'There is a dark location to explore to the west...'),
+        --     (3, 'Fuel Cell',    'To the north, a mound of sand might fuel your escape.'),
+        --     (4, 'Micro-generator', 'A southern wind generates a toxic smell from the mud flats.');
+        
+        INSERT INTO @requiredItems (item_id, item_name, hint) 
+        SELECT i.item_id, v.item_name, v.hint 
+        FROM (VALUES ('Nav Beacon Core','Head east in search of a tower as beacon of hope...'),
+                    ('Electronics Control Unit','There is a dark location to explore to the west...'),
+                    ('Fuel Cell','To the north, a mound of sand might fuel your escape.'),
+                    ('Micro-generator','A southern wind generates a toxic smell from the mud flats.')
+            ) v(item_name,hint) 
+        JOIN items i ON i.item_name=v.item_name;
+        
+        -- check - if there are not 4 items, error
+        IF (SELECT COUNT(*) FROM @requiredItems) < 4 
+            RAISERROR('One or more required items were not found by name. Check item_name spellings.', 16, 1);
 
         -- check the players inventory for required items
         DECLARE @playerItems TABLE (item_id INT);
