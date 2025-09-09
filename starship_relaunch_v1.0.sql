@@ -1039,3 +1039,230 @@ GO
 
 -- END DATABASE SCRIPT
 --##########################################################################################
+
+
+/**********************************************************************
+  SECTION 6.5: Patch Stored Procedures to avoid double logging (JEONGHWAN)
+  - Re-define usp_movePlayer & usp_pickUpItem without action_log INSERTs
+**********************************************************************/
+
+-- JEONGHWAN: redefine usp_movePlayer without action_log insert (trigger handles move logging)
+IF OBJECT_ID('dbo.usp_movePlayer', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.usp_movePlayer;
+GO
+CREATE PROCEDURE dbo.usp_movePlayer
+    @player_id INT,
+    @direction VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @current_location INT, @next_location INT;
+
+    SELECT @current_location = current_location_id
+    FROM players
+    WHERE player_id = @player_id;
+
+    SELECT @next_location = to_location_id
+    FROM location_connections
+    WHERE from_location_id = @current_location AND direction = @direction;
+
+    IF @next_location IS NULL
+    BEGIN
+        PRINT 'You cannot go that direction.';
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM locations WHERE location_id = @next_location AND is_locked = 1)
+    BEGIN
+        PRINT 'The direction is blocked.';
+        RETURN;
+    END
+
+    UPDATE players
+    SET current_location_id = @next_location,
+        last_action_time = GETDATE()
+    WHERE player_id = @player_id;
+
+    -- (JEONGHWAN) moved logging to trigger: dbo.trg_players_move_log
+END;
+GO
+
+-- JEONGHWAN: redefine usp_pickUpItem without action_log insert (trigger handles pickup logging)
+IF OBJECT_ID('dbo.usp_pickUpItem', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.usp_pickUpItem;
+GO
+CREATE PROCEDURE dbo.usp_pickUpItem
+    @player_id INT,
+    @item_id INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @location_id INT;
+
+    SELECT @location_id = current_location_id
+    FROM players
+    WHERE player_id = @player_id;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM location_items
+        WHERE location_id = @location_id AND item_id = @item_id
+    )
+    BEGIN
+        PRINT 'That item is not here.';
+        RETURN;
+    END
+
+    IF EXISTS (
+        SELECT 1 FROM items WHERE item_id = @item_id AND is_pickable = 0
+    )
+    BEGIN
+        PRINT 'You cannot pick up that item.';
+        RETURN;
+    END
+
+    -- upsert with quantity capped at 1 (even without trigger, stay consistent)
+    IF EXISTS (
+        SELECT 1 FROM inventory WHERE player_id = @player_id AND item_id = @item_id
+    )
+    BEGIN
+        UPDATE inventory
+           SET quantity = 1
+         WHERE player_id = @player_id AND item_id = @item_id;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO inventory (player_id, item_id, quantity)
+        VALUES (@player_id, @item_id, 1);
+    END
+
+    DELETE FROM location_items
+    WHERE location_id = @location_id AND item_id = @item_id;
+
+    DECLARE @item_name NVARCHAR(100);
+    SELECT @item_name = item_name FROM items WHERE item_id = @item_id;
+
+    IF @item_name IS NOT NULL
+        PRINT 'You have picked up an item: ' + @item_name + '.';
+    ELSE
+        PRINT 'Item not found.';
+END;
+GO
+
+
+/**********************************************************************
+  SECTION 7: Triggers (JEONGHWAN patch)
+  - trg_players_move_log: logs moves when players.current_location_id changes
+  - trg_inventory_audit:  logs pickups/drops when inventory changes
+  - trg_inventory_validate: enforces is_pickable=1 and quantity<=1
+**********************************************************************/
+-- JEONGHWAN: drop triggers if exist (idempotent build)
+IF OBJECT_ID('dbo.trg_players_move_log', 'TR') IS NOT NULL DROP TRIGGER dbo.trg_players_move_log;
+IF OBJECT_ID('dbo.trg_inventory_audit',   'TR') IS NOT NULL DROP TRIGGER dbo.trg_inventory_audit;
+IF OBJECT_ID('dbo.trg_inventory_validate','TR') IS NOT NULL DROP TRIGGER dbo.trg_inventory_validate;
+GO
+
+-- JEONGHWAN: log moves when player's current_location_id changes
+CREATE TRIGGER dbo.trg_players_move_log
+ON dbo.players
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF UPDATE(current_location_id)
+    BEGIN
+        ;WITH moved AS (
+            SELECT i.player_id,
+                   d.current_location_id AS from_loc,
+                   i.current_location_id AS to_loc
+            FROM inserted i
+            JOIN deleted  d ON d.player_id = i.player_id
+            WHERE ISNULL(d.current_location_id,-1) <> ISNULL(i.current_location_id,-1)
+        )
+        INSERT INTO dbo.action_log (player_id, action_location, action_time, player_action, details)
+        SELECT m.player_id,
+               m.to_loc,
+               CURRENT_TIMESTAMP,
+               'Move Player',
+               CONCAT('Player moved from ', lf.location_name, ' to ', lt.location_name, ' (trigger)')
+        FROM moved m
+        LEFT JOIN dbo.locations lf ON lf.location_id = m.from_loc
+        LEFT JOIN dbo.locations lt ON lt.location_id = m.to_loc;
+    END
+END;
+GO
+
+-- JEONGHWAN: audit pickups/drops on inventory changes
+CREATE TRIGGER dbo.trg_inventory_audit
+ON dbo.inventory
+AFTER INSERT, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- INSERT only (pickup)
+    INSERT INTO dbo.action_log (player_id, action_location, action_time, player_action, details)
+    SELECT i.player_id,
+           p.current_location_id,
+           CURRENT_TIMESTAMP,
+           'Pick Up Item',
+           CONCAT('Player picked up ', it.item_name, ' (trigger). Qty=', i.quantity)
+    FROM inserted i
+    JOIN dbo.players p ON p.player_id = i.player_id
+    JOIN dbo.items   it ON it.item_id   = i.item_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM deleted d
+        WHERE d.player_id = i.player_id AND d.item_id = i.item_id
+    );
+
+    -- DELETE only (drop)
+    INSERT INTO dbo.action_log (player_id, action_location, action_time, player_action, details)
+    SELECT d.player_id,
+           p.current_location_id,
+           CURRENT_TIMESTAMP,
+           'Drop Item',
+           CONCAT('Player dropped ', it.item_name, ' (trigger). Qty=', d.quantity)
+    FROM deleted d
+    JOIN dbo.players p ON p.player_id = d.player_id
+    JOIN dbo.items   it ON it.item_id   = d.item_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM inserted i
+        WHERE i.player_id = d.player_id AND i.item_id = d.item_id
+    );
+END;
+GO
+
+-- JEONGHWAN: enforce inventory business rules (pickable only, quantity <= 1)
+CREATE TRIGGER dbo.trg_inventory_validate
+ON dbo.inventory
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- deny unpickable items
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN dbo.items it ON it.item_id = i.item_id
+        WHERE it.is_pickable = 0
+    )
+    BEGIN
+        RAISERROR('Cannot pick up this item (is_pickable = 0).', 16, 1);
+        ROLLBACK TRANSACTION;
+        RETURN;
+    END
+
+    -- normalize quantity to 1 (v1.0 rule)
+    UPDATE inv
+      SET quantity = 1
+    FROM dbo.inventory inv
+    JOIN inserted i
+      ON inv.player_id = i.player_id AND inv.item_id = i.item_id
+    WHERE inv.quantity > 1;
+END;
+GO
+
+-- END TRIGGERS (JEONGHWAN)
+
